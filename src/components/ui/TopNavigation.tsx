@@ -61,6 +61,10 @@ export default function TopNavigation({
           <button
             key={c.id}
             onClick={() => onSelect(c.id)}
+            onMouseEnter={() => {
+              // Nạp trước gói nhị phân .glb vào HTTP Disk Cache của trình duyệt khi rê chuột lên nút chọn xe (tốn 0 MB VRAM)
+              fetch(`/models/${c.id}.glb`, { priority: 'low' } as RequestInit).catch(() => undefined);
+            }}
             className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs transition sm:px-4 sm:text-sm ${
               c.id === activeId ? 'bg-white font-medium text-black shadow' : 'text-white/70 hover:bg-white/10 hover:text-white'
             }`}

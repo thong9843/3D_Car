@@ -650,16 +650,45 @@ useGLTF.setDecoderPath(DRACO_PATH);
 
 const ktx2Loader = new KTX2Loader().setTranscoderPath('/basis/');
 let ktx2Detected = false;
+let maxAnisotropy = 8;
 
 export function setupKTX2(renderer: THREE.WebGLRenderer): void {
   if (ktx2Detected) return;
   ktx2Loader.detectSupport(renderer);
+  maxAnisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy() || 4);
   ktx2Detected = true;
 }
 
 function extendLoader(loader: GLTFLoader): void {
   loader.setKTX2Loader(ktx2Loader);
   loader.setMeshoptDecoder(MeshoptDecoder);
+}
+
+/** Giải phóng hoàn toàn Geometry + Material + Texture của mô hình cũ khỏi RAM & VRAM khi chuyển xe */
+function disposeSceneGraph(root: THREE.Object3D): void {
+  const textures = new Set<THREE.Texture>();
+  const materials = new Set<THREE.Material>();
+  const geometries = new Set<THREE.BufferGeometry>();
+
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (mesh.geometry) geometries.add(mesh.geometry);
+    const matsList = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of matsList) {
+      if (!m) continue;
+      materials.add(m);
+      for (const val of Object.values(m)) {
+        if (val && (val as THREE.Texture).isTexture) {
+          textures.add(val as THREE.Texture);
+        }
+      }
+    }
+  });
+
+  textures.forEach((t) => t.dispose());
+  materials.forEach((m) => m.dispose());
+  geometries.forEach((g) => g.dispose());
 }
 
 let manifestPromise: Promise<Set<string>> | null = null;
@@ -742,39 +771,75 @@ function prepareScene(source: THREE.Object3D, b: CarBody, paintMat: THREE.Materi
   const leathers: THREE.MeshStandardMaterial[] = [];
   const lamps: THREE.MeshStandardMaterial[] = [];
   const tails: THREE.MeshStandardMaterial[] = [];
+  // Cache vật liệu đã clone để dùng chung giữa hàng trăm sub-mesh cùng loại (tránh nhân bản vật liệu gây ngốn RAM)
+  const clonedMatCache = new Map<THREE.Material, THREE.Material>();
 
   for (const mesh of meshes) {
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    // Tắt castShadow/receiveShadow trên hàng trăm chi tiết nhỏ vì đã có ContactShadows tĩnh -> tăng vọt FPS & giảm tải GPU
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+
     const swap = (m: THREE.Material): THREE.Material => {
+      if (!m) return m;
+      // Nâng lọc nét góc nghiêng (Anisotropic Filtering) cho mọi texture trên vật liệu để xóa hiện tượng mờ/đứt nét
+      for (const val of Object.values(m)) {
+        if (val && (val as THREE.Texture).isTexture) {
+          const tex = val as THREE.Texture;
+          if (tex.anisotropy < maxAnisotropy) {
+            tex.anisotropy = maxAnisotropy;
+            tex.needsUpdate = true;
+          }
+        }
+      }
+
       const tag = `${m.name} ${mesh.name}`;
       if (isGlass(m, mesh)) {
-        const c = m.clone();
-        c.transparent = true;
-        glass.push({ mat: c, base: c.opacity });
+        let c = clonedMatCache.get(m);
+        if (!c) {
+          c = m.clone();
+          c.transparent = true;
+          glass.push({ mat: c, base: c.opacity });
+          clonedMatCache.set(m, c);
+        }
         liftMeshes.add(mesh);
         return c;
       }
       if (RE_LAMP.test(tag)) {
-        const c = (m as THREE.MeshStandardMaterial).clone();
-        c.toneMapped = false;
-        lamps.push(c);
+        let c = clonedMatCache.get(m) as THREE.MeshStandardMaterial | undefined;
+        if (!c) {
+          c = (m as THREE.MeshStandardMaterial).clone();
+          c.toneMapped = false;
+          lamps.push(c);
+          clonedMatCache.set(m, c);
+        }
         liftMeshes.add(mesh);
         return c;
       }
       if (RE_TAIL.test(tag)) {
-        const c = (m as THREE.MeshStandardMaterial).clone();
-        c.toneMapped = false;
-        tails.push(c);
+        let c = clonedMatCache.get(m) as THREE.MeshStandardMaterial | undefined;
+        if (!c) {
+          c = (m as THREE.MeshStandardMaterial).clone();
+          c.toneMapped = false;
+          tails.push(c);
+          clonedMatCache.set(m, c);
+        }
         liftMeshes.add(mesh);
         return c;
       }
       if (RE_LEATHER.test(tag)) {
-        const c = (m as THREE.MeshStandardMaterial).clone();
-        leathers.push(c);
+        let c = clonedMatCache.get(m) as THREE.MeshStandardMaterial | undefined;
+        if (!c) {
+          c = (m as THREE.MeshStandardMaterial).clone();
+          leathers.push(c);
+          clonedMatCache.set(m, c);
+        }
         return c;
       }
-      if (isPaint(m, mesh)) { liftMeshes.add(mesh); return paintMat; }
+      if (isPaint(m, mesh)) {
+        mesh.castShadow = true;
+        liftMeshes.add(mesh);
+        return paintMat;
+      }
       return m;
     };
     mesh.material = Array.isArray(mesh.material) ? mesh.material.map(swap) : swap(mesh.material);
@@ -843,7 +908,21 @@ function GlbVehicle({
       m.needsUpdate = true;
     }
   }, [leatherColor, prepared.leathers]);
-  useEffect(() => () => paintMat.dispose(), [paintMat]);
+
+  // Khi người dùng đổi sang mẫu xe khác: dọn sạch bộ nhớ GPU/RAM của chiếc xe vừa đóng để máy luôn nhẹ
+  useEffect(() => {
+    return () => {
+      paintMat.dispose();
+      drlMat.dispose();
+      hazardMat.dispose();
+      for (const g of prepared.glass) g.mat.dispose();
+      for (const l of prepared.leathers) l.dispose();
+      for (const lm of prepared.lamps) lm.dispose();
+      for (const tm of prepared.tails) tm.dispose();
+      disposeSceneGraph(scene);
+      useGLTF.clear(url);
+    };
+  }, [url, scene, paintMat, drlMat, hazardMat, prepared]);
 
   useFrame((state, dt) => {
     const k = 1 - Math.exp(-3.6 * Math.min(dt, 0.05));
