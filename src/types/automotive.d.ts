@@ -51,6 +51,32 @@ export interface CarBody {
   ladderFrame: boolean;
 }
 
+/** Danh sách đường dẫn ảnh thực tế theo từng nhóm */
+export interface RealImages {
+  exterior: string[];
+  interior: string[];
+  engine: string[];
+}
+
+/** Thông số kỹ thuật & giá chuẩn thị trường Việt Nam (dùng cho bộ so sánh) */
+export interface MarketSpecs {
+  /** Giá niêm yết (VNĐ) */
+  listPriceVnd: number;
+  /** Giá lăn bánh ước tính tại Hà Nội/TP.HCM (VNĐ) */
+  onRoadPriceVnd: number;
+  engine: string;
+  powerHp: number;
+  powerText: string;
+  torqueNm: number;
+  torqueText: string;
+  driveSystem: string;
+  /** Kích thước tổng thể (mm) */
+  sizeMm: { length: number; width: number; height: number };
+  wheelbaseMm: number;
+  adas: string[];
+  comfort: string[];
+}
+
 export interface Car {
   id: string;
   brand: string;
@@ -64,5 +90,44 @@ export interface Car {
   body: CarBody;
   paints: PaintOption[];
   hotspots: Hotspot[];
+  market: MarketSpecs;
+  realImages: RealImages;
 }
+
+/** Bộ phận có thể hover/click trên mô hình 3D */
+export type PartId = 'headlamp' | 'wheel' | 'powertrain' | 'steering' | 'screen' | 'seat' | 'suspension';
+
+/* ---------------------------------------------------------------- */
+/* Giai đoạn 3: Tuỳ biến 3D, Ánh sáng, Bối cảnh & Thương mại        */
+/* ---------------------------------------------------------------- */
+
+export type WheelStyle = 'sport' | 'executive' | 'offroad';
+export type LeatherColor = 'black' | 'cognac' | 'cream';
+export type StageEnv = 'neon' | 'glass' | 'urban';
+export type OpenableKey = 'doors' | 'hood' | 'trunk';
+
+export interface OpenablesState {
+  doors: boolean;
+  hood: boolean;
+  trunk: boolean;
+}
+
+export interface LightsState {
+  headlights: boolean;
+  drl: boolean;
+  hazards: boolean;
+}
+
+export interface TestDriveBooking {
+  id: string;
+  carId: string;
+  carName: string;
+  fullName: string;
+  phone: string;
+  dealer: string;
+  date: string;
+  notes: string;
+  createdAt: string;
+}
+
 

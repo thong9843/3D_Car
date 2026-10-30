@@ -1,4 +1,4 @@
-import type { Car, CarBody, Hotspot, SpecItem, ViewMode, Vec3 } from '../types/automotive';
+import type { Car, CarBody, Hotspot, MarketSpecs, RealImages, SpecItem, ViewMode, Vec3 } from '../types/automotive';
 
 /** Tạo điểm chạm gọn hơn */
 const hs = (
@@ -67,6 +67,70 @@ const cx = bPos(cx5Body);
 const vi = bPos(viosBody);
 const ev = bPos(everestBody);
 
+/* ------------------------------------------------------------------ */
+/* Thông số thị trường Việt Nam & ảnh thực tế                          */
+/* (ảnh Unsplash dùng làm mẫu - thay bằng ảnh chính hãng khi triển khai) */
+/* ------------------------------------------------------------------ */
+const U = (id: string) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1200&q=80`;
+
+/** Bộ ảnh thực tế chuẩn cho từng dòng xe (Ngoại thất, Nội thất, Khoang máy / Pin) */
+const vf8Images: RealImages = {
+  exterior: [U('photo-1593941707882-a5bba14938c7'), U('photo-1617788138017-80ad40651399'), U('photo-1619767886558-efdc259cde1a')],
+  interior: [U('photo-1560958089-b8a1929cea89'), U('photo-1503736334956-4c8f8e92946d'), U('photo-1549399542-7e3f8b79c341')],
+  engine: [U('photo-1593941707882-a5bba14938c7'), U('photo-1619642751034-765dfdf7c58e'), U('photo-1486262715619-67b85e0b08d3')],
+};
+
+const cx5Images: RealImages = {
+  exterior: [U('photo-1552519507-da3b142c6e3d'), U('photo-1502877338535-766e1452684a'), U('photo-1583121274602-3e2820c69888')],
+  interior: [U('photo-1511919884226-fd3cad34687c'), U('photo-1503736334956-4c8f8e92946d'), U('photo-1549399542-7e3f8b79c341')],
+  engine: [U('photo-1486262715619-67b85e0b08d3'), U('photo-1530046339160-ce3e530c7d2f'), U('photo-1619642751034-765dfdf7c58e')],
+};
+
+const viosImages: RealImages = {
+  exterior: [U('photo-1550355291-bbee04a92027'), U('photo-1541899481282-d53bffe3c35d'), U('photo-1492144534655-ae79c964c9d7')],
+  interior: [U('photo-1549399542-7e3f8b79c341'), U('photo-1511919884226-fd3cad34687c'), U('photo-1503736334956-4c8f8e92946d')],
+  engine: [U('photo-1619642751034-765dfdf7c58e'), U('photo-1486262715619-67b85e0b08d3'), U('photo-1530046339160-ce3e530c7d2f')],
+};
+
+const everestImages: RealImages = {
+  exterior: [U('photo-1533473359331-0135ef1b58bf'), U('photo-1519641471654-76ce0107ad1b'), U('photo-1563720223185-11003d516935')],
+  interior: [U('photo-1503736334956-4c8f8e92946d'), U('photo-1542282088-72c9c27ed0cd'), U('photo-1560958089-b8a1929cea89')],
+  engine: [U('photo-1530046339160-ce3e530c7d2f'), U('photo-1486262715619-67b85e0b08d3'), U('photo-1619642751034-765dfdf7c58e')],
+};
+
+const vf8Market: MarketSpecs = {
+  listPriceVnd: 1_409_000_000, onRoadPriceVnd: 1_430_000_000,
+  engine: '2 mô-tơ điện, pin CATL 87,7 kWh', powerHp: 402, powerText: '402 HP (300 kW)', torqueNm: 620, torqueText: '620 Nm',
+  driveSystem: 'e-AWD (2 cầu, 2 mô-tơ)',
+  sizeMm: { length: 4750, width: 1934, height: 1667 }, wheelbaseMm: 2950,
+  adas: ['ADAS Level 2+', 'Phanh khẩn cấp AEB', 'Cruise control thích ứng ACC', 'Giữ làn LKA / Cảnh báo lệch làn', 'Cảnh báo điểm mù BSW', 'Camera 360°', '11 túi khí'],
+  comfort: ['Màn hình 15,6 inch + trợ lý ViVi', 'Ghế da chỉnh điện, sưởi/làm mát', 'Cửa sổ trời toàn cảnh', 'Điều hòa tự động 2 vùng', 'Âm thanh 8 loa', 'Cập nhật phần mềm OTA'],
+};
+const cx5Market: MarketSpecs = {
+  listPriceVnd: 849_000_000, onRoadPriceVnd: 960_000_000,
+  engine: 'Xăng SkyActiv-G 2.0L, 4 xy-lanh', powerHp: 154, powerText: '154 HP @ 6.000 rpm', torqueNm: 200, torqueText: '200 Nm @ 4.000 rpm',
+  driveSystem: 'FWD (cầu trước)',
+  sizeMm: { length: 4590, width: 1845, height: 1680 }, wheelbaseMm: 2700,
+  adas: ['i-Activsense', 'Phanh thông minh SBS', 'Cruise control MRCC', 'Cảnh báo điểm mù BSM', 'Cảnh báo phương tiện cắt ngang RCTA', 'Camera 360°', '6 túi khí'],
+  comfort: ['Màn hình 10,25 inch + Commander', 'Ghế da chỉnh điện nhớ 2 vị trí', 'Cửa sổ trời', 'Điều hòa tự động 2 vùng', 'Âm thanh Bose 10 loa', 'Cốp điện'],
+};
+const viosMarket: MarketSpecs = {
+  listPriceVnd: 592_000_000, onRoadPriceVnd: 680_000_000,
+  engine: 'Xăng 2NR-FE 1.5L Dual VVT-i', powerHp: 107, powerText: '107 HP @ 6.000 rpm', torqueNm: 140, torqueText: '140 Nm @ 4.200 rpm',
+  driveSystem: 'FWD (cầu trước)',
+  sizeMm: { length: 4425, width: 1730, height: 1475 }, wheelbaseMm: 2550,
+  adas: ['Toyota Safety Sense', 'Cảnh báo tiền va chạm PCS', 'Cảnh báo lệch làn LDA', 'Đèn pha tự động', 'Cân bằng điện tử VSC', 'Hỗ trợ khởi hành ngang dốc HAC', '7 túi khí'],
+  comfort: ['Màn hình cảm ứng 9 inch', 'Ghế da', 'Điều hòa tự động Denso', 'Vô-lăng bọc da tích hợp nút bấm', 'Cửa gió hàng ghế sau', 'Khởi động nút bấm'],
+};
+const everestMarket: MarketSpecs = {
+  listPriceVnd: 1_452_000_000, onRoadPriceVnd: 1_640_000_000,
+  engine: 'Diesel 2.0L Bi-Turbo, 4 xy-lanh', powerHp: 210, powerText: '210 PS @ 3.750 rpm', torqueNm: 500, torqueText: '500 Nm @ 1.750-2.000 rpm',
+  driveSystem: '4WD điện tử, khóa vi sai cầu sau',
+  sizeMm: { length: 4914, width: 1923, height: 1842 }, wheelbaseMm: 2900,
+  adas: ['Cruise control thích ứng Stop&Go', 'Phanh khẩn cấp AEB', 'Cảnh báo điểm mù BLIS', 'Giữ làn / Hỗ trợ đánh lái tránh va chạm', 'Hỗ trợ đỗ xe tự động', 'Camera 360°', '7 túi khí'],
+  comfort: ['Màn hình dọc 12 inch SYNC 4A', 'Ghế da chỉnh điện 7 chỗ', 'Cửa sổ trời toàn cảnh', 'Điều hòa tự động 2 vùng + cửa gió sau', 'Âm thanh B&O 12 loa', 'Cốp điện đá gầm'],
+};
+
 export const carDatabase: Car[] = [
   {
     id: 'vf8',
@@ -84,6 +148,8 @@ export const carDatabase: Car[] = [
       s('Số chỗ ngồi', '5 chỗ'),
     ],
     body: vf8Body,
+    market: vf8Market,
+    realImages: vf8Images,
     paints: [
       { id: 'white', name: 'Trắng Ngọc Trai', nameEn: 'Pearl White', hex: '#f2f2ee', finish: 'pearl' },
       { id: 'red', name: 'Đỏ Crimson', nameEn: 'Crimson Red', hex: '#a3141f', finish: 'metallic' },
@@ -152,6 +218,8 @@ export const carDatabase: Car[] = [
       s('Số chỗ ngồi', '5 chỗ'),
     ],
     body: cx5Body,
+    market: cx5Market,
+    realImages: cx5Images,
     paints: [
       { id: 'soul', name: 'Đỏ Soul Crystal', nameEn: 'Soul Red Crystal', hex: '#8a0f1b', finish: 'metallic' },
       { id: 'machine', name: 'Xám Machine', nameEn: 'Machine Grey', hex: '#4a4e55', finish: 'metallic' },
@@ -220,6 +288,8 @@ export const carDatabase: Car[] = [
       s('Số chỗ ngồi', '5 chỗ'),
     ],
     body: viosBody,
+    market: viosMarket,
+    realImages: viosImages,
     paints: [
       { id: 'white', name: 'Trắng Ngọc Trai', nameEn: 'Pearl White', hex: '#f5f5f1', finish: 'pearl' },
       { id: 'silver', name: 'Bạc Ánh Kim', nameEn: 'Silver Metallic', hex: '#b8bcc2', finish: 'metallic' },
@@ -288,6 +358,8 @@ export const carDatabase: Car[] = [
       s('Số chỗ ngồi', '7 chỗ'),
     ],
     body: everestBody,
+    market: everestMarket,
+    realImages: everestImages,
     paints: [
       { id: 'grey', name: 'Xám Conquer', nameEn: 'Conquer Grey', hex: '#4c5157', finish: 'metallic' },
       { id: 'white', name: 'Trắng Arctic', nameEn: 'Arctic White', hex: '#f3f4f2', finish: 'solid' },
@@ -344,3 +416,6 @@ export const carDatabase: Car[] = [
 
 export const findCar = (id: string): Car => carDatabase.find((c) => c.id === id) ?? carDatabase[0];
 
+
+
+export const formatVnd = (v: number): string => `${v.toLocaleString('vi-VN')} đ`;

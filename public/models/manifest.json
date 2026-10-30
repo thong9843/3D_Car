@@ -1,0 +1,9 @@
+{
+  "_note": "Danh sách các mẫu xe nạp trực tiếp từ tệp .glb chuẩn trong public/models/",
+  "models": [
+    "vf8",
+    "cx5",
+    "vios",
+    "everest"
+  ]
+}

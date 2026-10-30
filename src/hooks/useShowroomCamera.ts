@@ -10,20 +10,25 @@ interface Options {
   car: Car;
   focus: Hotspot | null;
   autoRotate: boolean;
+  cinematic?: boolean;
+  onModeChange?: (m: ViewMode) => void;
 }
 
 const EXTERIOR_POS = new THREE.Vector3(6.2, 2.2, 6.2);
 const XRAY_POS = new THREE.Vector3(5.8, 3.4, 5.8);
 
-/** Điều phối camera: nội suy mượt (damping) tới vị trí đích theo chế độ xem / điểm chạm. */
-export function useShowroomCamera({ mode, car, focus, autoRotate }: Options) {
+/** Điều phối camera: nội suy mượt (damping) tới vị trí đích hoặc lượn theo kịch bản Cinematic Tour. */
+export function useShowroomCamera({ mode, car, focus, autoRotate, cinematic = false, onModeChange }: Options) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
   const goal = useRef<{ pos: THREE.Vector3; target: THREE.Vector3 } | null>(null);
   const settled = useRef(true);
+  const tourClock = useRef(0);
+  const lastPhase = useRef<ViewMode>(mode);
 
-  // Đặt đích mới khi đổi chế độ / xe / điểm chạm
+  // Đặt đích mới khi đổi chế độ / xe / điểm chạm (khi không bật Cinematic Tour)
   useEffect(() => {
+    if (cinematic) return;
     const b = car.body;
     let pos: THREE.Vector3;
     let target: THREE.Vector3;
@@ -45,13 +50,20 @@ export function useShowroomCamera({ mode, car, focus, autoRotate }: Options) {
     goal.current = { pos, target };
     settled.current = false;
     if (controls) {
-      // Nới giới hạn trong lúc bay camera để không bị kẹp khoảng cách
       controls.minDistance = 0.005;
       controls.maxDistance = 30;
       controls.maxPolarAngle = Math.PI - 0.05;
       controls.autoRotate = false;
     }
-  }, [mode, car, focus, controls]);
+  }, [mode, car, focus, controls, cinematic]);
+
+  useEffect(() => {
+    if (cinematic) {
+      tourClock.current = 0;
+      lastPhase.current = mode;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cinematic]);
 
   // Người dùng chạm vào điều khiển -> hủy chuyển cảnh tự động
   useEffect(() => {
@@ -94,6 +106,52 @@ export function useShowroomCamera({ mode, car, focus, autoRotate }: Options) {
 
   useFrame((_, dt) => {
     if (!controls) return;
+
+    // Kịch bản Cinematic Auto-Tour: 30 giây / vòng (0-12s Ngoại thất, 12-21s Buồng lái, 21-30s Khung gầm X-Ray)
+    if (cinematic) {
+      tourClock.current = (tourClock.current + Math.min(dt, 0.05)) % 30;
+      const t = tourClock.current;
+      const b = car.body;
+      controls.minDistance = 0.005;
+      controls.maxDistance = 30;
+      controls.autoRotate = false;
+
+      let desiredMode: ViewMode = 'exterior';
+      const desiredPos = new THREE.Vector3();
+      const desiredTarget = new THREE.Vector3();
+
+      if (t < 12) {
+        desiredMode = 'exterior';
+        const angle = (t / 12) * Math.PI * 1.65 - 0.4;
+        const radius = 6.2 - Math.sin((t / 12) * Math.PI) * 1.1;
+        desiredPos.set(Math.cos(angle) * radius, 1.35 + Math.sin((t / 12) * Math.PI) * 1.15, Math.sin(angle) * radius);
+        desiredTarget.set(0, 0.75, 0);
+      } else if (t < 21) {
+        desiredMode = 'interior';
+        const p = (t - 12) / 9;
+        const eyeX = b.roofFront - 0.42;
+        desiredPos.set(eyeX - 0.15, b.belt + 0.34, -0.35 + Math.sin(p * Math.PI * 2) * 0.28);
+        desiredTarget.set(b.hoodStart - 0.35, b.belt - 0.02, Math.sin(p * Math.PI) * 0.25);
+      } else {
+        desiredMode = 'xray';
+        const p = (t - 21) / 9;
+        const angle = p * Math.PI * 1.2 + 0.3;
+        desiredPos.set(Math.cos(angle) * 5.8, 2.9 + Math.sin(p * Math.PI) * 0.9, Math.sin(angle) * 5.8);
+        desiredTarget.set(0, 0.85, 0);
+      }
+
+      if (desiredMode !== lastPhase.current) {
+        lastPhase.current = desiredMode;
+        onModeChange?.(desiredMode);
+      }
+
+      const k = 1 - Math.exp(-3.0 * Math.min(dt, 0.05));
+      camera.position.lerp(desiredPos, k);
+      controls.target.lerp(desiredTarget, k);
+      controls.update();
+      return;
+    }
+
     const g = goal.current;
     if (g && !settled.current) {
       const k = 1 - Math.exp(-4.5 * Math.min(dt, 0.05));
@@ -110,4 +168,3 @@ export function useShowroomCamera({ mode, car, focus, autoRotate }: Options) {
     controls.update();
   });
 }
-

@@ -6,6 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "vite",
+    "setup:models": "node scripts/setup-glb-models.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
