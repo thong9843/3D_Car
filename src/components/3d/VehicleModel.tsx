@@ -2,6 +2,8 @@ import { Component, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox, useGLTF } from '@react-three/drei';
+import { KTX2Loader, type GLTFLoader } from 'three-stdlib';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import * as THREE from 'three';
 import type {
   Car,
@@ -646,6 +648,20 @@ const DRACO_PATH: string =
   (import.meta.env.VITE_DRACO_PATH as string | undefined) ?? 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
 useGLTF.setDecoderPath(DRACO_PATH);
 
+const ktx2Loader = new KTX2Loader().setTranscoderPath('/basis/');
+let ktx2Detected = false;
+
+export function setupKTX2(renderer: THREE.WebGLRenderer): void {
+  if (ktx2Detected) return;
+  ktx2Loader.detectSupport(renderer);
+  ktx2Detected = true;
+}
+
+function extendLoader(loader: GLTFLoader): void {
+  loader.setKTX2Loader(ktx2Loader);
+  loader.setMeshoptDecoder(MeshoptDecoder);
+}
+
 let manifestPromise: Promise<Set<string>> | null = null;
 
 function loadManifest(): Promise<Set<string>> {
@@ -673,14 +689,14 @@ class LoadBoundary extends Component<{ fallback: ReactNode; children: ReactNode 
   render() { return this.state.failed ? this.props.fallback : this.props.children; }
 }
 
-const RE_GLASS = /glass|window|windshield|kinh/i;
-const RE_PAINT = /body|paint|carpaint|exterior|shell|hood|door|fender|bumper|vo.?xe/i;
-const RE_NOT_PAINT = /wheel|rim|tire|tyre|chrome|light|lamp|interior|seat|trim|rubber|brake/i;
-const RE_LEATHER = /seat|leather|steer/i;
-const RE_LAMP = /head.?lamp|head.?light|matrix/i;
-const RE_TAIL = /tail/i;
-const RE_WHEEL_HIDE = /wheel_assembly|wheel_tire|wheel_rim/i;
-const RE_DOOR_HIDE = /door_left|door_right/i;
+const RE_GLASS = /glass|window|windshield|kinh|palettematerial00[456]/i;
+const RE_PAINT = /body|paint|carpaint|exterior|shell|hood|door|fender|bumper|vo.?xe|mat_m5_metallic|palettematerial003/i;
+const RE_NOT_PAINT = /wheel|rim|tire|tyre|chrome|light|lamp|interior|seat|trim|rubber|brake|calliper|grille|badge|plate|carbon|glass|window|hub|disk/i;
+const RE_LEATHER = /seat|leather|steer|interior|color_int|mat_details_int/i;
+const RE_LAMP = /head.?lamp|head.?light|matrix|lighta_material|mat_lights|lightemissive|emis|palettematerial002/i;
+const RE_TAIL = /tail|red_glass/i;
+const RE_WHEEL_HIDE = /^wheel_assembly|^wheel_tire|^wheel_rim/i;
+const RE_DOOR_HIDE = /^door_left|^door_right/i;
 
 interface LiftItem { mesh: THREE.Mesh; base: THREE.Vector3; delta: THREE.Vector3 }
 interface GlassItem { mat: THREE.Material; base: number }
@@ -691,15 +707,23 @@ interface Prepared {
   leathers: THREE.MeshStandardMaterial[];
   lamps: THREE.MeshStandardMaterial[];
   tails: THREE.MeshStandardMaterial[];
+  hasNativeWheels: boolean;
+  hasNativeDoors: boolean;
 }
 
 function prepareScene(source: THREE.Object3D, b: CarBody, paintMat: THREE.Material): Prepared {
   const root = source.clone(true);
   const meshes: THREE.Mesh[] = [];
+  let hasProceduralTag = false;
   root.traverse((o) => {
-    if (RE_WHEEL_HIDE.test(o.name) || RE_DOOR_HIDE.test(o.name)) o.visible = false;
+    if (RE_WHEEL_HIDE.test(o.name) || RE_DOOR_HIDE.test(o.name)) {
+      o.visible = false;
+      hasProceduralTag = true;
+    }
     if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
   });
+  const hasNativeWheels = !hasProceduralTag;
+  const hasNativeDoors = !hasProceduralTag;
 
   const isGlass = (m: THREE.Material, mesh: THREE.Mesh) =>
     RE_GLASS.test(`${m.name} ${mesh.name}`) || (m as THREE.MeshPhysicalMaterial).transmission > 0;
@@ -776,7 +800,7 @@ function prepareScene(source: THREE.Object3D, b: CarBody, paintMat: THREE.Materi
     const delta = up.clone().applyMatrix4(inv).sub(origin.clone().applyMatrix4(inv));
     lift.push({ mesh, base: mesh.position.clone(), delta });
   }
-  return { root, lift, glass, leathers, lamps, tails };
+  return { root, lift, glass, leathers, lamps, tails, hasNativeWheels, hasNativeDoors };
 }
 
 function GlbVehicle({
@@ -792,7 +816,7 @@ function GlbVehicle({
   onToggleOpenable,
 }: Props & { url: string }) {
   const b = car.body;
-  const { scene } = useGLTF(url, true);
+  const { scene } = useGLTF(url, true, true, extendLoader);
   const paintMat = useMemo(makePaintMaterial, []);
   const drlMat = useMemo(() => mats.drl.clone(), []);
   const hazardMat = useMemo(() => mats.hazard.clone(), []);
@@ -878,6 +902,9 @@ function GlbVehicle({
     <group ref={rootVibRef}>
       <primitive object={prepared.root} />
 
+      {/* Khi nâng vỏ X-Ray trên mô hình .glb thật, hiển thị thêm khối Pin/Động cơ & Hệ thống treo bên dưới */}
+      {mode === 'xray' && <Internals b={b} />}
+
       <group ref={extrasLiftRef}>
         {([-1, 1] as const).map((s) => {
           const zSide = s * (b.width / 2 - 0.04);
@@ -885,30 +912,34 @@ function GlbVehicle({
           const rRef = s < 0 ? doorRLRef : doorRRRef;
           return (
             <group key={s}>
-              <group
-                ref={fRef}
-                position={[frontHingeX, doorY, zSide]}
-                onClick={(e) => {
-                  if (e.delta <= 4 && onToggleOpenable) { e.stopPropagation(); onToggleOpenable('doors'); }
-                }}
-              >
-                <RoundedBox args={[doorLen, doorH, 0.11]} radius={0.035} position={[-doorLen / 2, 0, 0]} material={paintMat} castShadow />
-                <mesh position={[-doorLen + 0.14, 0.06, s * 0.06]} material={mats.chrome}>
-                  <boxGeometry args={[0.14, 0.025, 0.02]} />
-                </mesh>
-              </group>
-              <group
-                ref={rRef}
-                position={[rearHingeX, doorY, zSide]}
-                onClick={(e) => {
-                  if (e.delta <= 4 && onToggleOpenable) { e.stopPropagation(); onToggleOpenable('doors'); }
-                }}
-              >
-                <RoundedBox args={[doorLen, doorH, 0.11]} radius={0.035} position={[-doorLen / 2, 0, 0]} material={paintMat} castShadow />
-                <mesh position={[-doorLen + 0.14, 0.06, s * 0.06]} material={mats.chrome}>
-                  <boxGeometry args={[0.14, 0.025, 0.02]} />
-                </mesh>
-              </group>
+              {!prepared.hasNativeDoors && (
+                <>
+                  <group
+                    ref={fRef}
+                    position={[frontHingeX, doorY, zSide]}
+                    onClick={(e) => {
+                      if (e.delta <= 4 && onToggleOpenable) { e.stopPropagation(); onToggleOpenable('doors'); }
+                    }}
+                  >
+                    <RoundedBox args={[doorLen, doorH, 0.11]} radius={0.035} position={[-doorLen / 2, 0, 0]} material={paintMat} castShadow />
+                    <mesh position={[-doorLen + 0.14, 0.06, s * 0.06]} material={mats.chrome}>
+                      <boxGeometry args={[0.14, 0.025, 0.02]} />
+                    </mesh>
+                  </group>
+                  <group
+                    ref={rRef}
+                    position={[rearHingeX, doorY, zSide]}
+                    onClick={(e) => {
+                      if (e.delta <= 4 && onToggleOpenable) { e.stopPropagation(); onToggleOpenable('doors'); }
+                    }}
+                  >
+                    <RoundedBox args={[doorLen, doorH, 0.11]} radius={0.035} position={[-doorLen / 2, 0, 0]} material={paintMat} castShadow />
+                    <mesh position={[-doorLen + 0.14, 0.06, s * 0.06]} material={mats.chrome}>
+                      <boxGeometry args={[0.14, 0.025, 0.02]} />
+                    </mesh>
+                  </group>
+                </>
+              )}
               <mesh position={[b.length / 2 + 0.072, b.belt - 0.09, s * b.width * 0.28]} material={drlMat} userData={{ part: 'headlamp' }}>
                 <boxGeometry args={[0.04, 0.022, 0.48]} />
               </mesh>
@@ -922,25 +953,29 @@ function GlbVehicle({
           );
         })}
 
-        <group
-          ref={hoodRef}
-          position={[b.hoodStart + 0.05, b.belt - 0.02, 0]}
-          onClick={(e) => {
-            if (e.delta <= 4 && onToggleOpenable) { e.stopPropagation(); onToggleOpenable('hood'); }
-          }}
-        >
-          <RoundedBox args={[hoodLen, 0.055, b.width * 0.82]} radius={0.022} position={[hoodLen / 2, -0.02, 0]} rotation={[0, 0, -0.05]} material={paintMat} castShadow />
-        </group>
+        {!prepared.hasNativeDoors && (
+          <>
+            <group
+              ref={hoodRef}
+              position={[b.hoodStart + 0.05, b.belt - 0.02, 0]}
+              onClick={(e) => {
+                if (e.delta <= 4 && onToggleOpenable) { e.stopPropagation(); onToggleOpenable('hood'); }
+              }}
+            >
+              <RoundedBox args={[hoodLen, 0.055, b.width * 0.82]} radius={0.022} position={[hoodLen / 2, -0.02, 0]} rotation={[0, 0, -0.05]} material={paintMat} castShadow />
+            </group>
 
-        <group
-          ref={trunkRef}
-          position={[b.trunkEnd - 0.04, b.belt + 0.01, 0]}
-          onClick={(e) => {
-            if (e.delta <= 4 && onToggleOpenable) { e.stopPropagation(); onToggleOpenable('trunk'); }
-          }}
-        >
-          <RoundedBox args={[trunkLen, 0.055, b.width * 0.78]} radius={0.022} position={[-trunkLen / 2, -0.01, 0]} material={paintMat} castShadow />
-        </group>
+            <group
+              ref={trunkRef}
+              position={[b.trunkEnd - 0.04, b.belt + 0.01, 0]}
+              onClick={(e) => {
+                if (e.delta <= 4 && onToggleOpenable) { e.stopPropagation(); onToggleOpenable('trunk'); }
+              }}
+            >
+              <RoundedBox args={[trunkLen, 0.055, b.width * 0.78]} radius={0.022} position={[-trunkLen / 2, -0.01, 0]} material={paintMat} castShadow />
+            </group>
+          </>
+        )}
 
         {lights.headlights && (
           <>
@@ -950,10 +985,14 @@ function GlbVehicle({
         )}
       </group>
 
-      <Wheel x={b.axleF} z={wz} R={b.wheelR} style={wheelStyle} />
-      <Wheel x={b.axleF} z={-wz} R={b.wheelR} style={wheelStyle} />
-      <Wheel x={b.axleR} z={wz} R={b.wheelR} style={wheelStyle} />
-      <Wheel x={b.axleR} z={-wz} R={b.wheelR} style={wheelStyle} />
+      {!prepared.hasNativeWheels && (
+        <>
+          <Wheel x={b.axleF} z={wz} R={b.wheelR} style={wheelStyle} />
+          <Wheel x={b.axleF} z={-wz} R={b.wheelR} style={wheelStyle} />
+          <Wheel x={b.axleR} z={wz} R={b.wheelR} style={wheelStyle} />
+          <Wheel x={b.axleR} z={-wz} R={b.wheelR} style={wheelStyle} />
+        </>
+      )}
     </group>
   );
 }

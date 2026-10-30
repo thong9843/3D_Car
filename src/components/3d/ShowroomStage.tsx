@@ -26,7 +26,7 @@ import type {
   WheelStyle,
 } from '../../types/automotive';
 import { useShowroomCamera } from '../../hooks/useShowroomCamera';
-import VehicleModel from './VehicleModel';
+import VehicleModel, { setupKTX2 } from './VehicleModel';
 import HotspotBeacon from './HotspotBeacon';
 
 interface Props {
@@ -261,6 +261,7 @@ export default function ShowroomStage({
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: nightMode ? 0.92 : 1.08,
       }}
+      onCreated={({ gl }) => setupKTX2(gl)}
       style={{ touchAction: 'none' }}
     >
       {/* Bộ tứ tối ưu 60+ FPS: AdaptiveDpr, AdaptiveEvents, PerformanceMonitor, Bvh */}

@@ -40,7 +40,7 @@ const CARS = [
     trunkEnd: -1.6, roofRear: -1.05, roofFront: 0.1, hoodStart: 0.8,
     noseH: 0.72, ground: 0.24, wheelR: 0.37, axleF: 1.5, axleR: -1.45,
     layout: 'ev', ladderFrame: false, paintHex: '#f2f2ee',
-    cdnSource: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/ferrari.glb',
+    cdnSource: 'https://raw.githubusercontent.com/JamieGeddes/marque/main/public/models/audi-rs6-avant-gt.glb',
   },
   {
     id: 'cx5',
@@ -48,7 +48,7 @@ const CARS = [
     trunkEnd: -1.55, roofRear: -1.15, roofFront: 0.05, hoodStart: 0.78,
     noseH: 0.7, ground: 0.22, wheelR: 0.36, axleF: 1.4, axleR: -1.3,
     layout: 'ice-fwd', ladderFrame: false, paintHex: '#8a0f1b',
-    cdnSource: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/ToyCar/glTF-Binary/ToyCar.glb',
+    cdnSource: 'https://raw.githubusercontent.com/JamieGeddes/marque/main/public/models/toyota-gr-yaris.glb',
   },
   {
     id: 'vios',
@@ -56,7 +56,7 @@ const CARS = [
     trunkEnd: -1.3, roofRear: -0.8, roofFront: 0.0, hoodStart: 0.75,
     noseH: 0.62, ground: 0.2, wheelR: 0.31, axleF: 1.3, axleR: -1.25,
     layout: 'ice-fwd', ladderFrame: false, paintHex: '#f5f5f1',
-    cdnSource: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/ferrari.glb',
+    cdnSource: 'https://raw.githubusercontent.com/JamieGeddes/marque/main/public/models/bmw-m5-competition.glb',
   },
   {
     id: 'everest',
@@ -64,7 +64,7 @@ const CARS = [
     trunkEnd: -1.85, roofRear: -1.55, roofFront: 0.2, hoodStart: 0.9,
     noseH: 0.8, ground: 0.28, wheelR: 0.4, axleF: 1.55, axleR: -1.35,
     layout: 'ice-4wd', ladderFrame: true, paintHex: '#4c5157',
-    cdnSource: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb',
+    cdnSource: 'https://raw.githubusercontent.com/jssaini000/suv.glb/main/suv.glb.glb',
   },
 ];
 
@@ -288,23 +288,27 @@ function exportToGlbBuffer(scene) {
 
 async function main() {
   await fs.mkdir(OUT_DIR, { recursive: true });
-  const useRemoteCdn = process.argv.includes('--from-cdn');
+  const useProcedural = process.argv.includes('--procedural');
 
   for (const car of CARS) {
     const outFile = path.join(OUT_DIR, `${car.id}.glb`);
-    if (useRemoteCdn) {
-      console.log(`[CDN] Đang tải ${car.id}.glb từ ${car.cdnSource}...`);
-      const res = await fetch(car.cdnSource);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buf = Buffer.from(await res.arrayBuffer());
-      await fs.writeFile(outFile, buf);
-      console.log(`  ✓ Đã lưu ${outFile} (${(buf.length / 1024).toFixed(1)} kB)`);
-    } else {
-      const scene = createVehicleScene(car);
-      const buf = await exportToGlbBuffer(scene);
-      await fs.writeFile(outFile, buf);
-      console.log(`  ✓ Đã tạo ${outFile} (${(buf.length / 1024).toFixed(1)} kB)`);
+    if (!useProcedural) {
+      try {
+        console.log(`[CDN] Đang tải mô hình High-Poly ${car.id}.glb từ ${car.cdnSource}...`);
+        const res = await fetch(car.cdnSource);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buf = Buffer.from(await res.arrayBuffer());
+        await fs.writeFile(outFile, buf);
+        console.log(`  ✓ Đã lưu ${outFile} (${(buf.length / 1024 / 1024).toFixed(2)} MB)`);
+        continue;
+      } catch (e) {
+        console.warn(`  ! Không tải được từ CDN (${e.message}), chuyển sang xuất Procedural .glb...`);
+      }
     }
+    const scene = createVehicleScene(car);
+    const buf = await exportToGlbBuffer(scene);
+    await fs.writeFile(outFile, buf);
+    console.log(`  ✓ Đã tạo ${outFile} (${(buf.length / 1024).toFixed(1)} kB)`);
   }
 
   const manifestPath = path.join(OUT_DIR, 'manifest.json');
@@ -320,3 +324,4 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
